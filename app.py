@@ -272,22 +272,31 @@ def live_dashboard(df=None):
 
 def render_export_section(df):
     """Render CSV export button with metadata header."""
-    # Use stable filename to prevent media file errors during rapid reruns
     filename = "timestamps.csv"
 
-    # Create CSV with metadata header as comments
-    lines = []
-    lines.append("# Timestamp Export")
-    lines.append(f"# Generated: {datetime.now().isoformat()}")
-    lines.append(f"# Total Events: {len(df)}")
-    if len(df) > 0:
-        lines.append(f"# First: {df['timestamp'].iloc[0]}")
-        lines.append(f"# Last: {df['timestamp'].iloc[-1]}")
-    lines.append("#")
+    # Only regenerate CSV when data actually changes, not on every rerun
+    current_version = st.session_state.data_version
+    cached_version = st.session_state.get("csv_version", -1)
 
-    # Add data
-    csv_content = df.to_csv(index=False)
-    full_content = "\n".join(lines) + "\n" + csv_content
+    if cached_version != current_version or "csv_content" not in st.session_state:
+        # Create CSV with metadata header as comments
+        lines = []
+        lines.append("# Timestamp Export")
+        lines.append(f"# Generated: {datetime.now().isoformat()}")
+        lines.append(f"# Total Events: {len(df)}")
+        if len(df) > 0:
+            lines.append(f"# First: {df['timestamp'].iloc[0]}")
+            lines.append(f"# Last: {df['timestamp'].iloc[-1]}")
+        lines.append("#")
+
+        # Add data
+        csv_content = df.to_csv(index=False)
+        full_content = "\n".join(lines) + "\n" + csv_content
+
+        st.session_state.csv_content = full_content
+        st.session_state.csv_version = current_version
+    else:
+        full_content = st.session_state.csv_content
 
     st.download_button(
         label="📥 Export CSV",
