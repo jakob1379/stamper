@@ -727,10 +727,10 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "pandas", specifier = ">=2.0.0" },
-    { name = "plotly", specifier = ">=5.18.0" },
-    { name = "scipy", specifier = ">=1.10.0" },
+    { name = "numpy", specifier = ">=2.4.2" },
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "plotly", specifier = ">=6.5.2" },
+    { name = "scipy", specifier = ">=1.17.1" },
     { name = "streamlit", specifier = ">=1.54.0" },
 ]
 
