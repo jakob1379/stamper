@@ -106,7 +106,8 @@ def _format_duration(seconds):
     return f"{seconds:.1f}s"
 
 
-def _calculate_timing_stats(df):
+@st.cache_data(show_spinner=False)
+def _calculate_timing_stats(df, data_version):
     count = len(df)
     if count >= 2:
         duration = (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
@@ -140,17 +141,34 @@ def _render_metrics_row(count, duration, mean_interval, std_interval):
         st.metric("Std Deviation", _format_duration(std_interval))
 
 
-def _render_recent_events(df):
-    st.markdown("---")
-    st.subheader("Recent Events")
-    recent = df.tail(5).copy().iloc[::-1]
+@st.cache_data(show_spinner=False)
+def _get_recent_events_display(df_json, _version):
+    """Cache the recent events display DataFrame creation."""
+    df = pd.read_json(df_json, orient="split")
+    recent = df.tail(5).iloc[::-1]
     if "timestamp" not in recent.columns:
-        st.write(recent)
-        return
+        return recent
     recent["Time"] = recent["timestamp"].dt.strftime("%H:%M:%S")
     recent["Relative"] = recent["timestamp"].apply(
         lambda x: f"{(pd.Timestamp.now(tz='UTC') - x).total_seconds():.1f}s ago"
     )
+    return recent[["Time", "Relative"]]
+
+
+def _render_recent_events(df):
+    st.markdown("---")
+    st.subheader("Recent Events")
+    df_json = df.to_json(orient="split")
+    recent = _get_recent_events_display(df_json, st.session_state.data_version)
+    if "timestamp" in df.columns and "Time" in recent.columns:
+        recent = recent.copy()
+        recent["Relative"] = (
+            df.tail(5)
+            .iloc[::-1]["timestamp"]
+            .apply(
+                lambda x: f"{(pd.Timestamp.now(tz='UTC') - x).total_seconds():.1f}s ago"
+            )
+        )
     display_cols = ["Time", "Relative"]
     if "event_type" in recent.columns:
         display_cols.insert(1, "event_type")
@@ -162,13 +180,14 @@ def render_stats(timestamps_df):
         st.info("No timing data available yet. Add some timestamps to see stats.")
         return
     count, duration, mean_interval, std_interval = _calculate_timing_stats(
-        timestamps_df
+        timestamps_df, st.session_state.data_version
     )
     _render_metrics_row(count, duration, mean_interval, std_interval)
     _render_recent_events(timestamps_df)
 
 
-def _calc_regression(df):
+@st.cache_data(show_spinner=False)
+def _calc_regression(df, data_version):
     if len(df) < 2:
         return None, "Timestamp Delta Over Time"
     slope, intercept, r_value, _, _ = stats.linregress(df["seq"], df["delta_ms"])
@@ -197,7 +216,8 @@ def _apply_figure_layout(fig, title):
     return fig
 
 
-def create_scatterplot(df):
+@st.cache_data(show_spinner=False, max_entries=10)
+def create_scatterplot(df, _version):
     if df.empty:
         return go.Figure()
     fig = go.Figure()
@@ -213,7 +233,7 @@ def create_scatterplot(df):
             name="Timestamps",
         )
     )
-    reg_data, title = _calc_regression(df)
+    reg_data, title = _calc_regression(df, _version)
     if reg_data:
         x_line, y_line, r_squared = reg_data
         fig.add_trace(
@@ -266,7 +286,7 @@ def live_dashboard(df=None):
         st.metric("Avg Interval (ms)", f"{avg_interval_ms:.1f}")
 
     # Create and display scatterplot
-    fig = create_scatterplot(df)
+    fig = create_scatterplot(df, st.session_state.data_version)
     st.plotly_chart(fig, width="stretch")
 
 
