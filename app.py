@@ -272,8 +272,8 @@ def live_dashboard(df=None):
 
 def render_export_section(df):
     """Render CSV export button with metadata header."""
-    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"timestamps_{timestamp_str}.csv"
+    # Use stable filename to prevent media file errors during rapid reruns
+    filename = "timestamps.csv"
 
     # Create CSV with metadata header as comments
     lines = []
@@ -294,6 +294,7 @@ def render_export_section(df):
         data=full_content,
         file_name=filename,
         mime="text/csv",
+        key="export_csv",
         width="stretch",
     )
 
