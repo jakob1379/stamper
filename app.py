@@ -136,7 +136,9 @@ def _render_metrics_row(count, duration, mean_interval, std_interval):
 @st.cache_data(show_spinner=False)
 def _get_recent_events_display(df_json, _version):
     """Cache the recent events display DataFrame creation."""
-    df = pd.read_json(df_json, orient="split")
+    from io import StringIO
+
+    df = pd.read_json(StringIO(df_json), orient="split")
     recent = df.tail(5).iloc[::-1]
     if "timestamp" not in recent.columns:
         return recent
@@ -287,7 +289,7 @@ def live_dashboard(df=None):
 
 
 def render_export_section(df):
-    """Render CSV export button with metadata header."""
+    """Render CSV export button with raw data."""
     filename = "timestamps.csv"
 
     # Only regenerate CSV when data actually changes, not on every rerun
@@ -295,28 +297,15 @@ def render_export_section(df):
     cached_version = st.session_state.get("csv_version", -1)
 
     if cached_version != current_version or "csv_content" not in st.session_state:
-        # Create CSV with metadata header as comments
-        lines = []
-        lines.append("# Timestamp Export")
-        lines.append(f"# Generated: {datetime.now().isoformat()}")
-        lines.append(f"# Total Events: {len(df)}")
-        if len(df) > 0:
-            lines.append(f"# First: {df['timestamp'].iloc[0]}")
-            lines.append(f"# Last: {df['timestamp'].iloc[-1]}")
-        lines.append("#")
-
-        # Add data
         csv_content = df.to_csv(index=False)
-        full_content = "\n".join(lines) + "\n" + csv_content
-
-        st.session_state.csv_content = full_content
+        st.session_state.csv_content = csv_content
         st.session_state.csv_version = current_version
     else:
-        full_content = st.session_state.csv_content
+        csv_content = st.session_state.csv_content
 
     st.download_button(
         label="📥 Export CSV",
-        data=full_content,
+        data=csv_content,
         file_name=filename,
         mime="text/csv",
         key="export_csv",
