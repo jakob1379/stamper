@@ -277,13 +277,13 @@ def render_export_section(df):
 
     # Create CSV with metadata header as comments
     lines = []
-    lines.append(f"# Timestamp Export")
+    lines.append("# Timestamp Export")
     lines.append(f"# Generated: {datetime.now().isoformat()}")
     lines.append(f"# Total Events: {len(df)}")
     if len(df) > 0:
         lines.append(f"# First: {df['timestamp'].iloc[0]}")
         lines.append(f"# Last: {df['timestamp'].iloc[-1]}")
-    lines.append(f"#")
+    lines.append("#")
 
     # Add data
     csv_content = df.to_csv(index=False)
