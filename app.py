@@ -40,51 +40,43 @@ if "first_timestamp" not in st.session_state:
     st.session_state.first_timestamp = 0
 
 
+def _record_timestamp():
+    """Callback function to record a timestamp."""
+    now = datetime.now(timezone.utc)
+    unix_ts = int(time.time() * 1000)
+    timestamp_iso = now.isoformat()
+
+    state = st.session_state
+    timestamps = state.timestamps
+    seq = state.sequence + 1
+    is_first = not timestamps
+
+    delta_ms = 0 if is_first else unix_ts - state.first_timestamp
+
+    entry = {
+        "seq": seq,
+        "timestamp": timestamp_iso,
+        "unix_ts": unix_ts,
+        "delta_ms": delta_ms,
+    }
+
+    state.sequence = seq
+    state.timestamps.append(entry)
+    if is_first:
+        state.first_timestamp = unix_ts
+
+    state.last_activity = time.time()
+    state.data_version += 1
+
+
 def render_record_button():
     """Render a prominent record button with Space shortcut and timestamp logging."""
-
-    def record_timestamp():
-        now = datetime.now(timezone.utc)
-        unix_ts = int(time.time() * 1000)
-        timestamp_iso = now.isoformat()
-
-        # Cache session_state locally - single lookup per key
-        state = st.session_state
-        timestamps = state.timestamps
-        seq = state.sequence + 1
-
-        # Determine if this is the first timestamp
-        is_first = not timestamps
-
-        if is_first:
-            delta_ms = 0
-        else:
-            delta_ms = unix_ts - state.first_timestamp
-
-        entry = {
-            "seq": seq,
-            "timestamp": timestamp_iso,
-            "unix_ts": unix_ts,
-            "delta_ms": delta_ms,
-        }
-
-        # Batch updates - write back once
-        state.sequence = seq
-        state.timestamps.append(entry)
-        if is_first:
-            state.first_timestamp = unix_ts
-
-        # Track activity for the dashboard
-        state.last_activity = time.time()
-        state.data_version += 1
-        # Note: Button callbacks naturally trigger script rerun after completion
-
     st.button(
         "RECORD TIMESTAMP",
         type="primary",
         width="stretch",
         shortcut="Space",
-        on_click=record_timestamp,
+        on_click=_record_timestamp,
     )
 
     st.caption("Press SPACE")
@@ -107,7 +99,7 @@ def _format_duration(seconds):
 
 
 @st.cache_data(show_spinner=False)
-def _calculate_timing_stats(df, data_version):
+def _calculate_timing_stats(df, _data_version):
     count = len(df)
     if count >= 2:
         duration = (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
@@ -150,7 +142,9 @@ def _get_recent_events_display(df_json, _version):
         return recent
     recent["Time"] = recent["timestamp"].dt.strftime("%H:%M:%S")
     recent["Relative"] = recent["timestamp"].apply(
-        lambda x: f"{(pd.Timestamp.now(tz='UTC') - x).total_seconds():.1f}s ago"
+        lambda x: (
+            f"{(pd.Timestamp.now(tz='UTC') - (x.tz_convert('UTC') if x.tzinfo else x.tz_localize('UTC'))).total_seconds():.1f}s ago"
+        )
     )
     return recent[["Time", "Relative"]]
 
@@ -166,7 +160,9 @@ def _render_recent_events(df):
             df.tail(5)
             .iloc[::-1]["timestamp"]
             .apply(
-                lambda x: f"{(pd.Timestamp.now(tz='UTC') - x).total_seconds():.1f}s ago"
+                lambda x: (
+                    f"{(pd.Timestamp.now(tz='UTC') - (x.tz_convert('UTC') if x.tzinfo else x.tz_localize('UTC'))).total_seconds():.1f}s ago"
+                )
             )
         )
     display_cols = ["Time", "Relative"]
@@ -187,7 +183,7 @@ def render_stats(timestamps_df):
 
 
 @st.cache_data(show_spinner=False)
-def _calc_regression(df, data_version):
+def _calc_regression(df, _data_version):
     if len(df) < 2:
         return None, "Timestamp Delta Over Time"
     slope, intercept, r_value, _, _ = stats.linregress(df["seq"], df["delta_ms"])
