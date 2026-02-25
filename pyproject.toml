@@ -1,9 +1,9 @@
 [project]
 name = "timestamp"
 version = "0.1.0"
-description = "Add your description here"
+description = "simple timestamp generator - just press space"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "streamlit>=1.54.0",
     "pandas>=2.0.0",

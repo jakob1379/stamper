@@ -30,6 +30,15 @@ if "timestamps" not in st.session_state:
 if "sequence" not in st.session_state:
     st.session_state.sequence = 0
 
+if "last_activity" not in st.session_state:
+    st.session_state.last_activity = 0
+
+if "data_version" not in st.session_state:
+    st.session_state.data_version = 0
+
+if "first_timestamp" not in st.session_state:
+    st.session_state.first_timestamp = 0
+
 
 def render_record_button():
     """Render a prominent record button with Space shortcut and timestamp logging."""
@@ -39,21 +48,36 @@ def render_record_button():
         unix_ts = int(time.time() * 1000)
         timestamp_iso = now.isoformat()
 
-        if not st.session_state.timestamps:
-            delta_ms = 0
-            st.session_state.first_timestamp = unix_ts
-        else:
-            delta_ms = unix_ts - st.session_state.first_timestamp
+        # Cache session_state locally - single lookup per key
+        state = st.session_state
+        timestamps = state.timestamps
+        seq = state.sequence + 1
 
-        st.session_state.sequence += 1
+        # Determine if this is the first timestamp
+        is_first = not timestamps
+
+        if is_first:
+            delta_ms = 0
+        else:
+            delta_ms = unix_ts - state.first_timestamp
 
         entry = {
-            "seq": st.session_state.sequence,
+            "seq": seq,
             "timestamp": timestamp_iso,
             "unix_ts": unix_ts,
             "delta_ms": delta_ms,
         }
-        st.session_state.timestamps.append(entry)
+
+        # Batch updates - write back once
+        state.sequence = seq
+        state.timestamps.append(entry)
+        if is_first:
+            state.first_timestamp = unix_ts
+
+        # Track activity for the dashboard
+        state.last_activity = time.time()
+        state.data_version += 1
+        # Note: Button callbacks naturally trigger script rerun after completion
 
     st.button(
         "RECORD TIMESTAMP",
@@ -92,6 +116,16 @@ def _calculate_timing_stats(df):
     else:
         duration = mean_interval = std_interval = 0
     return count, duration, mean_interval, std_interval
+
+
+@st.cache_data(show_spinner=False)
+def _get_dataframe(timestamps_tuple, _version):
+    """Cache DataFrame creation. _version ensures cache invalidation when data changes."""
+    if not timestamps_tuple:
+        return pd.DataFrame()
+    df = pd.DataFrame(list(timestamps_tuple))
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
 
 
 def _render_metrics_row(count, duration, mean_interval, std_interval):
@@ -194,23 +228,20 @@ def create_scatterplot(df):
     return _apply_figure_layout(fig, title)
 
 
-@st.fragment(run_every="0.5s")
-def live_dashboard():
+@st.fragment(run_every="1s")
+def live_dashboard(df=None):
     """
-    Live auto-refresh dashboard for timestamp visualization.
-    Renders the scatterplot and updates automatically every 500ms.
-    Shows metrics: count, elapsed time, avg interval.
+    Dashboard fragment - updates every second to show elapsed time.
+    Button clicks trigger full script rerun for instant updates.
     """
-    timestamps = st.session_state.timestamps
-
-    if not timestamps:
-        st.info(
-            "📊 No timestamps recorded yet. Press SPACE or click RECORD to start collecting data."
-        )
-        return
-
-    # Convert to DataFrame
-    df = pd.DataFrame(timestamps)
+    if df is None:
+        timestamps = st.session_state.timestamps
+        if not timestamps:
+            st.info(
+                "📊 No timestamps recorded yet. Press SPACE or click RECORD to start collecting data."
+            )
+            return
+        df = pd.DataFrame(timestamps)
 
     # Calculate metrics
     count = len(df)
@@ -227,13 +258,10 @@ def live_dashboard():
 
     # Display metrics in columns
     col1, col2, col3 = st.columns(3)
-
     with col1:
         st.metric("Count", f"{count}")
-
     with col2:
         st.metric("Duration (s)", f"{duration_sec:.2f}")
-
     with col3:
         st.metric("Avg Interval (ms)", f"{avg_interval_ms:.1f}")
 
@@ -274,20 +302,20 @@ def render_export_section(df):
 st.title("◉ Timestamp Generator")
 st.markdown("Press SPACE to record timestamps")
 
+# Create DataFrame once at the top (cached)
+version = st.session_state.data_version
+df = _get_dataframe(tuple(st.session_state.timestamps), version)
+
 # Two-column layout: button left, stats right
 col1, col2 = st.columns([1, 2])
 with col1:
     render_record_button()
-    if st.session_state.timestamps:
-        df = pd.DataFrame(st.session_state.timestamps)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    if not df.empty:
         render_export_section(df)
 with col2:
-    if st.session_state.timestamps:
-        df = pd.DataFrame(st.session_state.timestamps)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    if not df.empty:
         render_stats(df)
 
 # Full-width live dashboard
 st.markdown("---")
-live_dashboard()
+live_dashboard(df)

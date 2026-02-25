@@ -1,8 +1,6 @@
 # Timestamp Logger
 
-A developer-focused timestamp recording tool with live visualization. Built with Streamlit.
-
-![Terminal Noir Theme](https://img.shields.io/badge/theme-Terminal%20Noir-0d1117?style=for-the-badge)
+A simple timestamp recording tool with live visualization. Built with Streamlit.
 
 ## What It Does
 
