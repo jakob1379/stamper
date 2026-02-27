@@ -314,12 +314,15 @@ def render_export_section(df: pd.DataFrame) -> None:
     else:
         csv_content: str = st.session_state.csv_content
 
+    import hashlib
+
+    file_hash = hashlib.md5(csv_content.encode()).hexdigest()[:8]
     st.download_button(
         label="📥 Export CSV",
         data=csv_content,
         file_name=filename,
         mime="text/csv",
-        key="export_csv",
+        key=f"export_csv_{file_hash}",
         width="stretch",
     )
 
