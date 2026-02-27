@@ -9,19 +9,7 @@ import time
 st.set_page_config(
     page_title="Timestamp Logger",
     layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
-st.markdown(
-    """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stToolbar"] {visibility: hidden;}
-    </style>
-    """,
-    unsafe_allow_html=True,
+    initial_sidebar_state="expanded",
 )
 
 if "timestamps" not in st.session_state:
@@ -81,13 +69,25 @@ def render_record_button():
 
     st.caption("Press SPACE")
 
-    if st.session_state.timestamps:
-        last = st.session_state.timestamps[-1]
+
+def _render_consolidated_metric(df):
+    """Render a single metric showing mean interval and std deviation."""
+    if len(df) < 2:
         st.metric(
-            label=f"#{last['seq']} Recorded",
-            value=f"+{last['delta_ms']} ms",
-            help=f"ISO: {last['timestamp']}\nUnix: {last['unix_ts']}",
+            "Interval Stats", "N/A", help="Need at least 2 timestamps", border=True
         )
+        return
+
+    intervals = df["delta_ms"].diff().dropna()
+    mean_interval = intervals.mean()
+    std_interval = intervals.std()
+
+    st.metric(
+        label="Mean Interval ± Std",
+        value=f"{mean_interval:.1f} ms",
+        delta=f"±{std_interval:.1f} ms",
+        border=True,
+    )
 
 
 def _format_duration(seconds):
@@ -121,16 +121,44 @@ def _get_dataframe(timestamps_tuple, _version):
     return df
 
 
-def _render_metrics_row(count, duration, mean_interval, std_interval):
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Events", f"{count:,}")
-    with col2:
-        st.metric("Session Duration", _format_duration(duration))
-    with col3:
-        st.metric("Mean Interval", _format_duration(mean_interval))
-    with col4:
-        st.metric("Std Deviation", _format_duration(std_interval))
+def _render_events_editor(df):
+    """Render an editable dataframe with proper column types."""
+    if df.empty:
+        return
+
+    column_config = {
+        "seq": st.column_config.NumberColumn(
+            "#",
+            help="Sequence number",
+            format="%d",
+            disabled=True,
+        ),
+        "timestamp": st.column_config.DatetimeColumn(
+            "Timestamp",
+            help="ISO timestamp",
+            format="YYYY-MM-DD HH:mm:ss.SSS",
+        ),
+        "unix_ts": st.column_config.NumberColumn(
+            "Unix (ms)",
+            help="Unix timestamp in milliseconds",
+            format="%d",
+        ),
+        "delta_ms": st.column_config.NumberColumn(
+            "Delta (ms)",
+            help="Milliseconds from first timestamp",
+            format="%d",
+        ),
+    }
+
+    st.data_editor(
+        df,
+        column_config=column_config,
+        hide_index=True,
+        width="stretch",
+        height=400,
+        num_rows="fixed",
+        key="events_editor",
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -177,11 +205,7 @@ def render_stats(timestamps_df):
     if timestamps_df.empty or len(timestamps_df) < 1:
         st.info("No timing data available yet. Add some timestamps to see stats.")
         return
-    count, duration, mean_interval, std_interval = _calculate_timing_stats(
-        timestamps_df, st.session_state.data_version
-    )
-    _render_metrics_row(count, duration, mean_interval, std_interval)
-    _render_recent_events(timestamps_df)
+    _render_events_editor(timestamps_df)
 
 
 @st.cache_data(show_spinner=False)
@@ -196,7 +220,7 @@ def _calc_regression(df, _data_version):
         x_line,
         y_line,
         r_squared,
-    ), f"Timestamp Delta Over Time (R² = {r_squared:.3f})"
+    ), f"Timestamp Delta Over Time"
 
 
 def _apply_figure_layout(fig, title):
@@ -205,7 +229,7 @@ def _apply_figure_layout(fig, title):
         xaxis_title="Sequence",
         yaxis_title="Delta from Start (ms)",
         template="plotly_dark",
-        height=400,
+        autosize=True,
         margin=dict(l=50, r=50, t=50, b=50),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -247,42 +271,8 @@ def create_scatterplot(df, _version):
 
 
 @st.fragment(run_every="1s")
-def live_dashboard(df=None):
-    """
-    Dashboard fragment - updates every second to show elapsed time.
-    Button clicks trigger full script rerun for instant updates.
-    """
-    if df is None:
-        timestamps = st.session_state.timestamps
-        if not timestamps:
-            st.info(
-                "📊 No timestamps recorded yet. Press SPACE or click RECORD to start collecting data."
-            )
-            return
-        df = pd.DataFrame(timestamps)
-
-    # Calculate metrics
-    count = len(df)
-
-    if count >= 2:
-        duration_sec = df["delta_ms"].iloc[-1] / 1000.0
-
-        # Calculate average interval in milliseconds
-        intervals = df["delta_ms"].diff().dropna()
-        avg_interval_ms = intervals.mean()
-    else:
-        duration_sec = 0
-        avg_interval_ms = 0
-
-    # Display metrics in columns
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Count", f"{count}")
-    with col2:
-        st.metric("Duration (s)", f"{duration_sec:.2f}")
-    with col3:
-        st.metric("Avg Interval (ms)", f"{avg_interval_ms:.1f}")
-
+def live_dashboard_plot(df):
+    """Render just the plot in the right column - updates every second."""
     # Create and display scatterplot
     fig = create_scatterplot(df, st.session_state.data_version)
     st.plotly_chart(fig, width="stretch")
@@ -321,16 +311,24 @@ st.markdown("Press SPACE to record timestamps")
 version = st.session_state.data_version
 df = _get_dataframe(tuple(st.session_state.timestamps), version)
 
-# Two-column layout: button left, stats right
-col1, col2 = st.columns([1, 2])
+# Two-column layout: 1/5 left for controls, 4/5 right for plot
+col1, col2 = st.columns([1, 4])
+
 with col1:
     render_record_button()
+
     if not df.empty:
-        render_export_section(df)
-with col2:
-    if not df.empty:
+        _render_consolidated_metric(df)
+
+        st.subheader(f"All Events ({len(df)})")
         render_stats(df)
 
-# Full-width live dashboard
-st.markdown("---")
-live_dashboard(df)
+        render_export_section(df)
+
+with col2:
+    if not df.empty:
+        live_dashboard_plot(df)
+    else:
+        st.info(
+            "📊 No timestamps recorded yet. Press SPACE or click RECORD to start collecting data."
+        )
