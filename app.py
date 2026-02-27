@@ -275,7 +275,7 @@ def live_dashboard_plot(df):
     """Render just the plot in the right column - updates every second."""
     # Create and display scatterplot
     fig = create_scatterplot(df, st.session_state.data_version)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", height="stretch")
 
 
 def render_export_section(df):
@@ -315,15 +315,16 @@ df = _get_dataframe(tuple(st.session_state.timestamps), version)
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    render_record_button()
+    with st.container(height="stretch", vertical_alignment="distribute"):
+        render_record_button()
 
-    if not df.empty:
-        _render_consolidated_metric(df)
+        if not df.empty:
+            _render_consolidated_metric(df)
 
-        st.subheader(f"All Events ({len(df)})")
-        render_stats(df)
+            st.subheader(f"All Events ({len(df)})")
+            render_stats(df)
 
-        render_export_section(df)
+            render_export_section(df)
 
 with col2:
     if not df.empty:
