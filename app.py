@@ -1,10 +1,15 @@
-import streamlit as st
+from __future__ import annotations
+
+import time
+from datetime import datetime, timezone
+from io import StringIO
+from typing import Any
+
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import numpy as np
+import streamlit as st
 from scipy import stats
-from datetime import datetime, timezone
-import time
 
 st.set_page_config(
     page_title="Timestamp Logger",
@@ -28,20 +33,20 @@ if "first_timestamp" not in st.session_state:
     st.session_state.first_timestamp = 0
 
 
-def _record_timestamp():
+def _record_timestamp() -> None:
     """Callback function to record a timestamp."""
-    now = datetime.now(timezone.utc)
-    unix_ts = int(time.time() * 1000)
-    timestamp_iso = now.isoformat()
+    now: datetime = datetime.now(timezone.utc)
+    unix_ts: int = int(time.time() * 1000)
+    timestamp_iso: str = now.isoformat()
 
-    state = st.session_state
-    timestamps = state.timestamps
-    seq = state.sequence + 1
-    is_first = not timestamps
+    state: Any = st.session_state
+    timestamps: list[dict[str, Any]] = state.timestamps
+    seq: int = state.sequence + 1
+    is_first: bool = not timestamps
 
-    delta_ms = 0 if is_first else unix_ts - state.first_timestamp
+    delta_ms: int = 0 if is_first else unix_ts - state.first_timestamp
 
-    entry = {
+    entry: dict[str, int | str] = {
         "seq": seq,
         "timestamp": timestamp_iso,
         "unix_ts": unix_ts,
@@ -57,7 +62,7 @@ def _record_timestamp():
     state.data_version += 1
 
 
-def render_record_button():
+def render_record_button() -> None:
     """Render a prominent record button with Space shortcut and timestamp logging."""
     st.button(
         "RECORD TIMESTAMP",
@@ -70,7 +75,7 @@ def render_record_button():
     st.caption("Press SPACE")
 
 
-def _render_consolidated_metric(df):
+def _render_consolidated_metric(df: pd.DataFrame) -> None:
     """Render a single metric showing mean interval and std deviation."""
     if len(df) < 2:
         st.metric(
@@ -78,9 +83,9 @@ def _render_consolidated_metric(df):
         )
         return
 
-    intervals = df["delta_ms"].diff().dropna()
-    mean_interval = intervals.mean()
-    std_interval = intervals.std()
+    intervals: pd.Series = df["delta_ms"].diff().dropna()
+    mean_interval: float = float(intervals.mean())
+    std_interval: float = float(intervals.std())
 
     st.metric(
         label="Mean Interval ± Std",
@@ -90,7 +95,7 @@ def _render_consolidated_metric(df):
     )
 
 
-def _format_duration(seconds):
+def _format_duration(seconds: float) -> str:
     if seconds >= 3600:
         return f"{seconds / 3600:.1f}h"
     elif seconds >= 60:
@@ -99,34 +104,41 @@ def _format_duration(seconds):
 
 
 @st.cache_data(show_spinner=False)
-def _calculate_timing_stats(df, _data_version):
-    count = len(df)
+def _calculate_timing_stats(
+    df: pd.DataFrame, _data_version: int
+) -> tuple[int, float, float, float]:
+    count: int = len(df)
+    duration: float = 0.0
+    mean_interval: float = 0.0
+    std_interval: float = 0.0
+
     if count >= 2:
         duration = (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
-        intervals = df["timestamp"].diff().dt.total_seconds().dropna()
-        mean_interval = intervals.mean()
-        std_interval = intervals.std()
-    else:
-        duration = mean_interval = std_interval = 0
+        intervals = df["timestamp"].diff().dt.total_seconds().dropna()  # type: ignore
+        mean_interval = float(intervals.mean())
+        std_interval = float(intervals.std())
+
     return count, duration, mean_interval, std_interval
 
 
 @st.cache_data(show_spinner=False)
-def _get_dataframe(timestamps_tuple, _version):
+def _get_dataframe(
+    timestamps_tuple: tuple[dict[str, Any], ...], _version: int
+) -> pd.DataFrame:
     """Cache DataFrame creation. _version ensures cache invalidation when data changes."""
     if not timestamps_tuple:
         return pd.DataFrame()
-    df = pd.DataFrame(list(timestamps_tuple))
+    df: pd.DataFrame = pd.DataFrame(list(timestamps_tuple))
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
 
 
-def _render_events_editor(df):
+def _render_events_editor(df: pd.DataFrame) -> None:
     """Render an editable dataframe with proper column types."""
     if df.empty:
         return
 
-    column_config = {
+    column_config: dict[str, Any] = {
         "seq": st.column_config.NumberColumn(
             "#",
             help="Sequence number",
@@ -162,12 +174,10 @@ def _render_events_editor(df):
 
 
 @st.cache_data(show_spinner=False)
-def _get_recent_events_display(df_json, _version):
+def _get_recent_events_display(df_json: str, _version: int) -> pd.DataFrame:
     """Cache the recent events display DataFrame creation."""
-    from io import StringIO
-
-    df = pd.read_json(StringIO(df_json), orient="split")
-    recent = df.tail(5).iloc[::-1]
+    df: pd.DataFrame = pd.read_json(StringIO(df_json), orient="split")
+    recent: pd.DataFrame = df.tail(5).iloc[::-1]
     if "timestamp" not in recent.columns:
         return recent
     recent["Time"] = recent["timestamp"].dt.strftime("%H:%M:%S")
@@ -179,11 +189,13 @@ def _get_recent_events_display(df_json, _version):
     return recent[["Time", "Relative"]]
 
 
-def _render_recent_events(df):
+def _render_recent_events(df: pd.DataFrame) -> None:
     st.markdown("---")
     st.subheader("Recent Events")
-    df_json = df.to_json(orient="split")
-    recent = _get_recent_events_display(df_json, st.session_state.data_version)
+    df_json: str = df.to_json(orient="split")
+    recent: pd.DataFrame = _get_recent_events_display(
+        df_json, st.session_state.data_version
+    )
     if "timestamp" in df.columns and "Time" in recent.columns:
         recent = recent.copy()
         recent["Relative"] = (
@@ -195,13 +207,13 @@ def _render_recent_events(df):
                 )
             )
         )
-    display_cols = ["Time", "Relative"]
+    display_cols: list[str] = ["Time", "Relative"]
     if "event_type" in recent.columns:
         display_cols.insert(1, "event_type")
     st.dataframe(recent[display_cols], width="stretch", hide_index=True, height=200)
 
 
-def render_stats(timestamps_df):
+def render_stats(timestamps_df: pd.DataFrame) -> None:
     if timestamps_df.empty or len(timestamps_df) < 1:
         st.info("No timing data available yet. Add some timestamps to see stats.")
         return
@@ -209,13 +221,18 @@ def render_stats(timestamps_df):
 
 
 @st.cache_data(show_spinner=False)
-def _calc_regression(df, _data_version):
+def _calc_regression(
+    df: pd.DataFrame, _data_version: int
+) -> tuple[tuple[np.ndarray, np.ndarray, float] | None, str]:
     if len(df) < 2:
         return None, "Timestamp Delta Over Time"
+    slope: float
+    intercept: float
+    r_value: float
     slope, intercept, r_value, _, _ = stats.linregress(df["seq"], df["delta_ms"])
-    r_squared = r_value**2
-    x_line = np.linspace(df["seq"].min(), df["seq"].max(), 100)
-    y_line = slope * x_line + intercept
+    r_squared: float = r_value**2
+    x_line: np.ndarray = np.linspace(df["seq"].min(), df["seq"].max(), 100)
+    y_line: np.ndarray = slope * x_line + intercept
     return (
         x_line,
         y_line,
@@ -223,7 +240,7 @@ def _calc_regression(df, _data_version):
     ), f"Timestamp Delta Over Time"
 
 
-def _apply_figure_layout(fig, title):
+def _apply_figure_layout(fig: go.Figure, title: str) -> go.Figure:
     fig.update_layout(
         title=title,
         xaxis_title="Sequence",
@@ -239,10 +256,10 @@ def _apply_figure_layout(fig, title):
 
 
 @st.cache_data(show_spinner=False, max_entries=10)
-def create_scatterplot(df, _version):
+def create_scatterplot(df: pd.DataFrame, _version: int) -> go.Figure:
     if df.empty:
         return go.Figure()
-    fig = go.Figure()
+    fig: go.Figure = go.Figure()
     fig.add_trace(
         go.Scatter(
             x=df["seq"],
@@ -255,6 +272,8 @@ def create_scatterplot(df, _version):
             name="Timestamps",
         )
     )
+    reg_data: tuple[np.ndarray, np.ndarray, float] | None
+    title: str
     reg_data, title = _calc_regression(df, _version)
     if reg_data:
         x_line, y_line, r_squared = reg_data
@@ -271,27 +290,27 @@ def create_scatterplot(df, _version):
 
 
 @st.fragment(run_every="1s")
-def live_dashboard_plot(df):
+def live_dashboard_plot(df: pd.DataFrame) -> None:
     """Render just the plot in the right column - updates every second."""
     # Create and display scatterplot
-    fig = create_scatterplot(df, st.session_state.data_version)
+    fig: go.Figure = create_scatterplot(df, st.session_state.data_version)
     st.plotly_chart(fig, width="stretch", height="stretch")
 
 
-def render_export_section(df):
+def render_export_section(df: pd.DataFrame) -> None:
     """Render CSV export button with raw data."""
-    filename = "timestamps.csv"
+    filename: str = "timestamps.csv"
 
     # Only regenerate CSV when data actually changes, not on every rerun
-    current_version = st.session_state.data_version
-    cached_version = st.session_state.get("csv_version", -1)
+    current_version: int = st.session_state.data_version
+    cached_version: int = st.session_state.get("csv_version", -1)
 
     if cached_version != current_version or "csv_content" not in st.session_state:
-        csv_content = df.to_csv(index=False)
+        csv_content: str = df.to_csv(index=False)
         st.session_state.csv_content = csv_content
         st.session_state.csv_version = current_version
     else:
-        csv_content = st.session_state.csv_content
+        csv_content: str = st.session_state.csv_content
 
     st.download_button(
         label="📥 Export CSV",
@@ -308,8 +327,8 @@ st.title("◉ Timestamp Generator")
 st.markdown("Press SPACE to record timestamps")
 
 # Create DataFrame once at the top (cached)
-version = st.session_state.data_version
-df = _get_dataframe(tuple(st.session_state.timestamps), version)
+version: int = st.session_state.data_version
+df: pd.DataFrame = _get_dataframe(tuple(st.session_state.timestamps), version)
 
 # Two-column layout: 1/5 left for controls, 4/5 right for plot
 col1, col2 = st.columns([1, 4])
