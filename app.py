@@ -62,8 +62,9 @@ def _record_timestamp() -> None:
     state.data_version += 1
 
 
-def render_record_button() -> None:
-    """Render a prominent record button with Space shortcut and timestamp logging."""
+@st.fragment
+def render_record_fragment() -> None:
+    """Render record button in an isolated fragment to prevent full-page reruns."""
     st.button(
         "RECORD TIMESTAMP",
         type="primary",
@@ -73,6 +74,15 @@ def render_record_button() -> None:
     )
 
     st.caption("Press SPACE")
+
+    # Show last recorded in same fragment for instant feedback
+    if st.session_state.timestamps:
+        last = st.session_state.timestamps[-1]
+        st.metric(
+            label=f"#{last['seq']} Recorded",
+            value=f"+{last['delta_ms']} ms",
+            border=True,
+        )
 
 
 def _render_consolidated_metric(df: pd.DataFrame) -> None:
@@ -338,9 +348,16 @@ df: pd.DataFrame = _get_dataframe(tuple(st.session_state.timestamps), version)
 # Two-column layout: 1/5 left for controls, 4/5 right for plot
 col1, col2 = st.columns([1, 4])
 
+# Create stable placeholders first
+if "metrics_placeholder" not in st.session_state:
+    st.session_state.metrics_placeholder = None
+if "events_placeholder" not in st.session_state:
+    st.session_state.events_placeholder = None
+
 with col1:
     with st.container(height="stretch", vertical_alignment="distribute"):
-        render_record_button()
+        # Record button in isolated fragment - only this reruns on SPACE
+        render_record_fragment()
 
         if not df.empty:
             _render_consolidated_metric(df)
