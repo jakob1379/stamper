@@ -155,7 +155,7 @@ def _render_events_editor(df):
         column_config=column_config,
         hide_index=True,
         width="stretch",
-        height=400,
+        height=250,
         num_rows="fixed",
         key="events_editor",
     )
@@ -229,7 +229,7 @@ def _apply_figure_layout(fig, title):
         xaxis_title="Sequence",
         yaxis_title="Delta from Start (ms)",
         template="plotly_dark",
-        autosize=True,
+        height=850,
         margin=dict(l=50, r=50, t=50, b=50),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
