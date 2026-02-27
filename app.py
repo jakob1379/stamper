@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from io import StringIO
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -114,7 +114,9 @@ def _calculate_timing_stats(
 
     if count >= 2:
         duration = (df["timestamp"].max() - df["timestamp"].min()).total_seconds()
-        intervals = df["timestamp"].diff().dt.total_seconds().dropna()  # type: ignore
+        timestamps: pd.Series = df["timestamp"]
+        deltas = cast(pd.Series, timestamps.diff())
+        intervals: pd.Series = deltas.dt.total_seconds().dropna()
         mean_interval = float(intervals.mean())
         std_interval = float(intervals.std())
 
